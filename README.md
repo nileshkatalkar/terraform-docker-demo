@@ -142,7 +142,15 @@ docker ps
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| `terraform init` failed with `x509: certificate signed by unknown authority` | My network's firewall re-signs HTTPS traffic, so Terraform did not trust the certificate when downloading the provider from GitHub | Ran `init` on a different network connection; the provider is then cached in `.terraform/` and later runs work offline |
+| `terraform init` failed with `x509: certificate signed by unknown authority` | My network's firewall re-signs HTTPS traffic, so Terraform did not trust the certificate when downloading the provider from GitHub | Manually downloaded file "terraform-provider-docker_3.9.0_windows_amd64.zip" and put it in "C:\tools\terraform-plugins\registry.terraform.io\kreuzwerker\docker\" and then create "%APPDATA%\terraform.rc" with the following code and then run `terraform init` | provider_installation {
+  filesystem_mirror {
+    path    = "C:/tools/terraform-plugins"
+    include = ["registry.terraform.io/kreuzwerker/docker"]
+  }
+  direct {
+    exclude = ["registry.terraform.io/kreuzwerker/docker"]
+  }
+}|
 | Many host ports were already in use | Other containers on my machine used 5000, 8080 to 8082, 8090, 3000, and 9090 | Chose port 8095 and made it a variable |
 
 ## What I learned
