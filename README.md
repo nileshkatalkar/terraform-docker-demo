@@ -138,12 +138,111 @@ docker ps
 
 ![Drift plan](docs/drift-plan.png)
 
-## Problems I hit and how I solved them
+## Problems I Faced and How I Solved Them
 
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| `terraform init` failed with `x509: certificate signed by unknown authority` | My network's firewall re-signs HTTPS traffic, so Terraform did not trust the certificate when downloading the provider from GitHub | Ran `init` on a different network connection; the provider is then cached in `.terraform/` and later runs work offline |
-| Many host ports were already in use | Other containers on my machine used 5000, 8080 to 8082, 8090, 3000, and 9090 | Chose port 8095 and made it a variable |
+  --------------------------------------------------------------------------------------------------------------------------------
+  Problem                                           Root Cause              Solution
+  ------------------------------------------------- ----------------------- ------------------------------------------------------
+  `terraform init` failed with                      My network firewall     Manually downloaded
+  `x509: certificate signed by unknown authority`   re-signs HTTPS traffic  `terraform-provider-docker_3.9.0_windows_amd64.zip`,
+                                                    using its own           placed the extracted provider package in a local
+                                                    certificate authority.  Terraform filesystem mirror, and configured
+                                                    Terraform did not trust `terraform.rc` to use that mirror instead of
+                                                    the certificate while   downloading the provider directly.
+                                                    downloading the Docker  
+                                                    provider from GitHub.   
+
+  Many host ports were already in use               Other Docker containers Selected port `8095` to avoid port conflicts and
+                                                    and applications were   configured it as a Terraform variable for easier
+                                                    already using ports     customization.
+                                                    `5000`, `8080–8082`,    
+                                                    `8090`, `3000`, and     
+                                                    `9090`.                 
+  --------------------------------------------------------------------------------------------------------------------------------
+
+### Terraform Provider Configuration
+
+**1. Create the local provider directory**
+
+Run this PowerShell command:
+
+``` powershell
+New-Item -ItemType Directory -Force -Path "C:\tools\terraform-plugins\registry.terraform.io\kreuzwerker\docker\3.9.0\windows_amd64"
+```
+
+**2. Place and extract the provider package**
+
+Download `terraform-provider-docker_3.9.0_windows_amd64.zip` and extract
+its contents into:
+
+``` text
+C:\tools\terraform-plugins\registry.terraform.io\kreuzwerker\docker\3.9.0\windows_amd64\
+```
+
+The filesystem mirror expects the provider package in the version- and
+platform-specific directory structure shown above. Simply placing the
+ZIP file in the parent `kreuzwerker\docker` directory is not sufficient.
+
+**3. Create the Terraform CLI configuration file**
+
+File location:
+
+``` text
+%APPDATA%\terraform.rc
+```
+
+Configuration:
+
+``` hcl
+provider_installation {
+  filesystem_mirror {
+    path    = "C:/tools/terraform-plugins"
+    include = ["registry.terraform.io/kreuzwerker/docker"]
+  }
+
+  direct {
+    exclude = ["registry.terraform.io/kreuzwerker/docker"]
+  }
+}
+```
+
+**4. Initialize Terraform**
+
+``` bash
+terraform init
+```
+
+### Port Configuration
+
+Instead of hardcoding the application port, define it as a Terraform
+variable.
+
+Example in `variables.tf`:
+
+``` hcl
+variable "host_port" {
+  description = "Host port used to access the Flask application"
+  type        = number
+  default     = 8095
+}
+```
+
+This makes it easier to change the application port without modifying
+the main Terraform configuration.
+
+### Important Notes
+
+-   The filesystem mirror configuration tells Terraform to install the
+    Docker provider from the local directory.
+-   The `direct` exclusion prevents Terraform from trying to download
+    this provider directly.
+-   This workaround avoids the failing direct download; it does not fix
+    the underlying certificate trust issue.
+-   For a permanent enterprise solution, install your organization's
+    trusted root CA in the appropriate trust store.
+-   Verify that the downloaded provider package is authentic and matches
+    the required provider version and platform.
+
 
 ## What I learned
 
